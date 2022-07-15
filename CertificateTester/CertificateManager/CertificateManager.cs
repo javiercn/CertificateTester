@@ -121,10 +121,6 @@ internal abstract class CertificateManager
             return certificates;
         }
 
-        bool HasOid(X509Certificate2 certificate, string oid) =>
-            certificate.Extensions.OfType<X509Extension>()
-                .Any(e => string.Equals(oid, e.Oid?.Value, StringComparison.Ordinal));
-
         static byte GetCertificateVersion(X509Certificate2 c)
         {
             var byteArray = c.Extensions.OfType<X509Extension>()
@@ -150,6 +146,10 @@ internal abstract class CertificateManager
             (!requireExportable || IsExportable(certificate)) &&
             GetCertificateVersion(certificate) >= AspNetHttpsCertificateVersion;
     }
+
+    internal static bool HasOid(X509Certificate2 certificate, string oid) =>
+                certificate.Extensions.OfType<X509Extension>()
+                    .Any(e => string.Equals(oid, e.Oid?.Value, StringComparison.Ordinal));
 
     protected internal virtual void PopulateCertificatesFromStore(X509Store store, List<X509Certificate2> certificates)
     {
