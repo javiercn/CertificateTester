@@ -7,8 +7,8 @@ internal class Program
 {
     // To run these tests yourself, adjust the paths accordingly. Certificate tester starts in /bin/Debug/net7.0, so you either
     // need to provide full paths here or walk up the directory hierarchy structure.
-    static readonly string dotnet6Path = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "../../../../../net60sdk"));
-    static readonly string dotnet6SdkPath = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "../../../../../net60sdk"));
+    static readonly string dotnet6Path = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "../../../../../net6SDK"));
+    static readonly string dotnet6SdkPath = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "../../../../../net6SDK"));
     static readonly string dotnet7Path = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "../../../../../../aspnetcore/.dotnet/dotnet"));
 
     // The .NET SDK points to the SDK in the ASP.NET Core repository. You need to build the repository with eng\build.sh -pack
@@ -85,15 +85,27 @@ internal class Program
         // .NET 6.0 will prompt for the key (as it does today).
         // .NET 7.0 will not prompt and run successfully
 
-        await Run60And70AppsUsingCertificate(client, use70SdkDevCerts: true);
+        await Run60And70AppsUsingCertificate(client, dotnet7WillFailToBind: false, use70SdkDevCerts: true);
 
         // Cleanup for next scenario
         Console.WriteLine("Removing all the certificates.");
         manager.RemoveAllCertificates(StoreName.My, StoreLocation.CurrentUser);
         manager.RemoveAllCertificates(StoreName.Root, StoreLocation.CurrentUser);
 
-        // Scenario 2: Same but .NET 7.0 trusted the certificate
+        // Scenario 4: Same but .NET 7.0 trusted the certificate
         await Run60And70AppsUsingCertificate(client, trust: true);
+
+        // Cleanup for next scenario
+        Console.WriteLine("Removing all the certificates.");
+        manager.RemoveAllCertificates(StoreName.My, StoreLocation.CurrentUser);
+        manager.RemoveAllCertificates(StoreName.Root, StoreLocation.CurrentUser);
+
+        // Scenario 5: Same as 1, but .NET 7.0 was used to "fix" the key via dotnet dev-certs https (on .NET 7.0)
+        // .NET 6.0 will prompt for the key (as it does today).
+        // .NET 7.0 will run without prompt.
+
+        await RunDotnetApp(dotnet6Path, $"dev-certs https", dotnet6SdkPath);
+        await Run60And70AppsUsingCertificate(client, dotnet7WillFailToBind: false, use70SdkDevCerts: true);
 
         // Login keychain
         DisplayCertificates(StoreName.My, StoreLocation.CurrentUser);
@@ -157,10 +169,11 @@ internal class Program
 
         async Task Run60And70AppsUsingCertificate(
             HttpClient client,
+            bool dotnet7WillFailToBind = true,
             bool trust = false,
             bool use70SdkDevCerts = false)
         {
-            Console.WriteLine("Creating a new certificate with dotnet dev-certs https using the 6.0 SDK.");
+            Console.WriteLine($"Creating a new certificate with dotnet dev-certs https using the {(use70SdkDevCerts ? "7.0" : "6.0")} SDK.");
             await RunDotnetApp(
                 !use70SdkDevCerts ? dotnet6Path : dotnet7Path,
                 $"dev-certs https{(trust ? " --trust" : "")}",
@@ -173,12 +186,16 @@ internal class Program
                 dotnet7SdkPath,
                 dotnet7WebAppPath);
 
+            Console.WriteLine("Press a key when you are ready to continue.");
+            Console.ReadKey(true);
             Console.WriteLine("Requesting https://localhost:5001/");
-            await Task.Delay(10_000);
             try
             {
                 Console.WriteLine(await client.GetStringAsync("https://localhost:5001"));
-                throw new InvalidOperationException("The app should not start because we are binding to HTTPS without the cert being valid.");
+                if (dotnet7WillFailToBind)
+                {
+                    throw new InvalidOperationException("The app should not start because we are binding to HTTPS without the cert being valid.");
+                }
             }
             catch (Exception)
             {
@@ -193,7 +210,8 @@ internal class Program
                 dotnet6WebAppPath);
 
             Console.WriteLine("Requesting https://localhost:5001/");
-            await Task.Delay(10_000);
+            Console.WriteLine("Press a key when you are ready to continue.");
+            Console.ReadKey(true);
             try
             {
                 Console.WriteLine(await client.GetStringAsync("https://localhost:5001"));
